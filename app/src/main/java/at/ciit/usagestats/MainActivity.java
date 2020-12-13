@@ -1,9 +1,4 @@
 package at.ciit.usagestats;
-/*
-  Created by Javatraining www.ciit.at (Amjad) on 16,August,2020
-*/
-
-import androidx.appcompat.app.AppCompatActivity;
 
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
@@ -13,12 +8,21 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,9 +51,10 @@ public class MainActivity extends AppCompatActivity {
         permissionDescriptionTv =findViewById(R.id.permission_description_tv);
         usageTv =  findViewById(R.id.usage_tv);
         appsList =  findViewById(R.id.apps_list);
-
+        startService(new Intent(this, TimeService.class));
         this.loadStatistics();
     }
+
 
 
     // each time the application gets in foreground -> getGrantStatus and render the corresponding buttons
@@ -92,27 +97,55 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<App> appsList = new ArrayList<>();
         List<UsageStats> usageStatsList = mySortedMap.values().stream().filter(this::isAppInfoAvailable).collect(Collectors.toList());
 
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        WifiInfo wInfo = wifiManager.getConnectionInfo();
+        String macAddress = wInfo.getMacAddress();
+
         // get total time of apps usage to calculate the usagePercentage for each app
         long totalTime = usageStatsList.stream().map(UsageStats::getTotalTimeInForeground).mapToLong(Long::longValue).sum();
+
+        //create json
+        JSONArray obj = new JSONArray();
+        boolean shitCode = true;
+
 
         //fill the appsList
         for (UsageStats usageStats : usageStatsList) {
             try {
                 String packageName = usageStats.getPackageName();
                 ApplicationInfo ai = getApplicationContext().getPackageManager().getApplicationInfo(packageName, 0);
-                Drawable icon = getApplicationContext().getPackageManager().getApplicationIcon(ai);
                 String appName = getApplicationContext().getPackageManager().getApplicationLabel(ai).toString();
-                String usageDuration = getDurationBreakdown(usageStats.getTotalTimeInForeground());
-                int usagePercentage = (int) (usageStats.getTotalTimeInForeground() * 100 / totalTime);
+                Log.i("[*** appky ***]", appName);
+                if(appName.toLowerCase().matches("youtube") || appName.toLowerCase().matches("instagram") || appName.toLowerCase().matches("snapchat") || appName.toLowerCase().matches("tiktok") ||  appName.toLowerCase().matches("facebook") ||  appName.toLowerCase().matches("twitter") ||  appName.toLowerCase().matches("twitch") || appName.toLowerCase().matches("messenger")){
+                    Drawable icon = getApplicationContext().getPackageManager().getApplicationIcon(ai);
+                    String usageDuration = getDurationBreakdown(usageStats.getTotalTimeInForeground());
+                    int usagePercentage = (int) (usageStats.getTotalTimeInForeground() * 100 / totalTime);
 
-                App usageStatDTO = new App(icon, appName, usagePercentage, usageDuration);
-                appsList.add(usageStatDTO);
-            } catch (PackageManager.NameNotFoundException e) {
+                    App usageStatDTO = new App(icon, appName, usagePercentage, usageDuration);
+                    appsList.add(usageStatDTO);
+
+                    // add values to JSON
+                    JSONObject appRecord = new JSONObject();
+                    appRecord.put("appname", appName);
+                    appRecord.put("duration", usageDuration);
+                    obj.put(appRecord);
+                }
+            } catch (PackageManager.NameNotFoundException | JSONException e) {
                 e.printStackTrace();
             }
         }
 
 
+        JSONObject usr = new JSONObject();
+        try {
+            usr.put("device", macAddress);
+            usr.put("stats", obj);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+
+        Log.i("[*** JSON ***]", usr.toString());
         // reverse the list to get most usage first
         Collections.reverse(appsList);
         // build the adapter
@@ -179,6 +212,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+
+
+
+
+
+
     /**
      * helper method used to show/hide items in the view when  PACKAGE_USAGE_STATS permission is not allowed
      */
@@ -213,4 +252,8 @@ public class MainActivity extends AppCompatActivity {
         appsList.setVisibility(View.VISIBLE);
 
     }
+
+
+
+
 }
